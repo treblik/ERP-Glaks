@@ -177,3 +177,61 @@ else:
                         st.rerun()
         else:
             st.warning("Catálogo vazio. Cadastre produtos primeiro.")
+            import streamlit as st
+import pandas as pd
+from sqlalchemy import create_engine, text
+from datetime import datetime
+
+# --- CONFIGURAÇÃO DA CONEXÃO ---
+# O Streamlit gerencia a conexão automaticamente via secrets
+conn = st.connection("postgresql", type="sql")
+
+# --- FUNÇÕES DE BANCO DE DADOS ---
+def inicializar_banco():
+    """Cria as tabelas caso elas não existam"""
+    with conn.session as s:
+        s.execute(text("""
+            CREATE TABLE IF NOT EXISTS produtos (
+                id TEXT PRIMARY KEY,
+                nome TEXT,
+                preco_custo FLOAT,
+                preco_venda FLOAT,
+                estoque INTEGER
+            );
+        """))
+        s.execute(text("""
+            CREATE TABLE IF NOT EXISTS movimentacoes (
+                id_mov SERIAL PRIMARY KEY,
+                data TIMESTAMP,
+                id_prod TEXT,
+                tipo TEXT,
+                quantidade INTEGER,
+                valor_total FLOAT
+            );
+        """))
+        s.commit()
+
+def salvar_produto(id_p, nome, custo, venda):
+    with conn.session as s:
+        s.execute(text("INSERT INTO produtos (id, nome, preco_custo, preco_venda, estoque) VALUES (:id, :n, :c, :v, 0)"),
+                  {"id": id_p, "n": nome, "c": custo, "v": venda})
+        s.commit()
+
+def atualizar_estoque_db(id_p, novo_estoque, tipo, qtd, valor_total):
+    with conn.session as s:
+        # Atualiza estoque
+        s.execute(text("UPDATE produtos SET estoque = :est WHERE id = :id"), {"est": novo_estoque, "id": id_p})
+        # Registra movimentação
+        s.execute(text("INSERT INTO movimentacoes (data, id_prod, tipo, quantidade, valor_total) VALUES (:d, :id, :t, :q, :v)"),
+                  {"d": datetime.now(), "id": id_p, "t": tipo, "q": qtd, "v": valor_total})
+        s.commit()
+
+# --- INÍCIO DO APP ---
+inicializar_banco()
+
+# Para ler os dados e transformar em DataFrame:
+df_produtos = conn.query("SELECT * FROM produtos", ttl="0")
+df_movimentacoes = conn.query("SELECT * FROM movimentacoes", ttl="0")
+
+# --- LÓGICA DE LOGIN E TELAS (Igual ao seu código anterior) ---
+# ... (substitua st.session_state.produtos por df_produtos onde necessário)
